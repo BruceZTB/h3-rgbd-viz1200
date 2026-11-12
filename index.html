@@ -1,0 +1,1150 @@
+<!doctype html>
+<html lang="zh-CN">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>RGB-D 第 1200 次更新可视化</title>
+<style>
+/* 版式：页首简介，然后每个数据块一个区段。
+   区段 = 标题、片段名、说明、指标；一条播放控制；
+   生成块：左边 2×2 视频，右边 4D 点云。重建块：上面一排 4 个视频，下面并排 3 个联动的点云。 */
+:root {
+  --bg: #f4f5f8;
+  --surface: #ffffff;
+  --surface-2: #e8ebf1;
+  --border: #d3d8e2;
+  --fg: #161a22;
+  --fg-muted: #566072;
+  --accent: #1f4fbf;
+  --accent-fg: #ffffff;
+  --gen: #8a4b00;
+  --gen-bg: #fbeed3;
+  --rec: #0a665d;
+  --rec-bg: #d8f1ec;
+  --video-bg: #dde1e9;
+  --pc-bg: #e4e7ee;
+  --cam: #d92d20;
+  --overlay: rgba(255, 255, 255, 0.82);
+  --font: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans CJK SC", "Helvetica Neue", Arial, sans-serif;
+  --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0f1216;
+    --surface: #171b21;
+    --surface-2: #222830;
+    --border: #2d343f;
+    --fg: #e7eaf0;
+    --fg-muted: #9aa4b5;
+    --accent: #7ea4ff;
+    --accent-fg: #0b1020;
+    --gen: #f0c36a;
+    --gen-bg: #3a2c0e;
+    --rec: #6fd6c8;
+    --rec-bg: #0f332f;
+    --video-bg: #1b2027;
+    --pc-bg: #0a0c10;
+    --cam: #ff7a66;
+    --overlay: rgba(15, 18, 22, 0.78);
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0f1216;
+  --surface: #171b21;
+  --surface-2: #222830;
+  --border: #2d343f;
+  --fg: #e7eaf0;
+  --fg-muted: #9aa4b5;
+  --accent: #7ea4ff;
+  --accent-fg: #0b1020;
+  --gen: #f0c36a;
+  --gen-bg: #3a2c0e;
+  --rec: #6fd6c8;
+  --rec-bg: #0f332f;
+  --video-bg: #1b2027;
+  --pc-bg: #0a0c10;
+  --cam: #ff7a66;
+  --overlay: rgba(15, 18, 22, 0.78);
+  color-scheme: dark;
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+/* 下面有些元素设了 display（.jump、点云画布），不加这一条 hidden 属性对它们不起作用 */
+[hidden] { display: none !important; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--fg);
+  font: 15px/1.65 var(--font);
+  -webkit-text-size-adjust: 100%;
+}
+.wrap {
+  max-width: 1280px;
+  margin: 0 auto;
+  padding-block: 28px 56px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* 页首 */
+.intro { display: grid; grid-template-columns: minmax(0, 1fr); gap: 10px; }
+.intro h1 { margin: 0; font-size: 26px; line-height: 1.3; font-weight: 650; text-wrap: balance; overflow-wrap: anywhere; }
+.intro p { margin: 0; max-width: 52em; }
+.intro p b { font-weight: 650; }
+.intro a { color: var(--accent); }
+.intro .howto { color: var(--fg-muted); font-size: 14px; }
+.jump { display: flex; flex-wrap: wrap; gap: 6px 8px; margin-top: 6px; }
+.jump a {
+  color: var(--accent);
+  text-decoration: none;
+  font-size: 13.5px;
+  padding: 3px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+  overflow-wrap: anywhere;
+}
+.jump a:hover { background: var(--surface-2); }
+
+.notice {
+  margin: 28px 0 0;
+  padding: 10px 14px;
+  border: 1px dashed var(--border);
+  border-radius: 8px;
+  color: var(--fg-muted);
+  font-size: 13.5px;
+  overflow-wrap: anywhere;
+}
+
+/* 区段 */
+.block { margin-top: 32px; padding-top: 28px; border-top: 1px solid var(--border); }
+.block-head { display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; margin-bottom: 16px; }
+.kicker { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; }
+.tag { font-size: 12px; font-weight: 600; line-height: 1.5; padding: 1px 8px; border-radius: 4px; white-space: nowrap; }
+.tag.gen { color: var(--gen); background: var(--gen-bg); }
+.tag.rec { color: var(--rec); background: var(--rec-bg); }
+.clip { font-family: var(--mono); font-size: 12.5px; color: var(--fg-muted); overflow-wrap: anywhere; min-width: 0; }
+.block h2 { margin: 0; font-size: 20px; line-height: 1.35; font-weight: 650; text-wrap: balance; overflow-wrap: anywhere; }
+.notes { margin: 0; padding-left: 1.25em; max-width: 56em; color: var(--fg-muted); font-size: 14px; }
+.notes li { overflow-wrap: anywhere; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px 8px; }
+.chip {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  padding: 2px 9px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+  font-size: 12.5px;
+  line-height: 1.6;
+  max-width: 100%;
+}
+.chip-l { color: var(--fg-muted); overflow-wrap: anywhere; }
+.chip-v { font-weight: 600; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+
+/* 主体：控制条在上，左视频右点云；窄屏时依次是视频、控制条、点云 */
+.stage {
+  display: grid;
+  grid-template-columns: minmax(0, 5fr) minmax(0, 6fr);
+  grid-template-areas: "ctrl ctrl" "videos pc";
+  gap: 14px 20px;
+  align-items: start;
+}
+.controls { grid-area: ctrl; }
+.videos { grid-area: videos; }
+.pc { grid-area: pc; align-self: stretch; }
+
+.controls {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+}
+.btn {
+  font: inherit;
+  font-size: 13.5px;
+  line-height: 1.5;
+  color: var(--fg);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 4px 12px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.btn:hover { background: var(--surface-2); }
+.btn:disabled { opacity: 0.5; cursor: default; }
+.btn.play { min-width: 4.8em; background: var(--accent); border-color: var(--accent); color: var(--accent-fg); font-weight: 600; }
+.btn.play:hover { background: var(--accent); filter: brightness(1.08); }
+.controls input[type="range"] { flex: 1 1 auto; min-width: 0; margin: 0; accent-color: var(--accent); }
+.counter {
+  flex: none;
+  min-width: 6.8em;
+  text-align: right;
+  white-space: nowrap;
+  font-size: 13.5px;
+  color: var(--fg-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.videos { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.vid { margin: 0; display: grid; grid-template-columns: minmax(0, 1fr); gap: 4px; min-width: 0; }
+.vid canvas { display: block; width: 100%; height: auto; border-radius: 4px; background: var(--video-bg); }
+.vid figcaption { font-size: 12.5px; line-height: 1.45; color: var(--fg-muted); overflow-wrap: anywhere; }
+
+.pc { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.pc-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; font-size: 13px; }
+.pc-title { margin: 0 2px 0 0; font-size: 15px; line-height: 1.4; font-weight: 650; white-space: nowrap; }
+.seg { display: inline-flex; border: 1px solid var(--border); border-radius: 6px; overflow: hidden; background: var(--surface); }
+.seg label { position: relative; display: block; cursor: pointer; }
+.seg input { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; opacity: 0; cursor: pointer; }
+.seg span { display: block; padding: 3px 10px; line-height: 1.5; white-space: nowrap; border-left: 1px solid var(--border); }
+.seg label:first-child span { border-left: 0; }
+.seg input:checked + span { background: var(--accent); color: var(--accent-fg); font-weight: 600; }
+.seg input:focus-visible + span { outline: 2px solid var(--fg); outline-offset: -3px; }
+.opt { display: inline-flex; align-items: center; gap: 6px; color: var(--fg-muted); white-space: nowrap; }
+.opt input[type="checkbox"] { margin: 0; accent-color: var(--accent); }
+.opt input[type="range"] { width: 92px; margin: 0; accent-color: var(--accent); }
+.pc-view {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 420px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+  background: var(--pc-bg);
+  -webkit-user-select: none;
+  user-select: none;
+}
+.pc-view canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+  touch-action: none;
+  cursor: grab;
+  outline-offset: -3px;
+}
+.pc-view canvas:active { cursor: grabbing; }
+.pc-hint { position: absolute; left: 8px; right: 8px; bottom: 8px; pointer-events: none; font-size: 12px; line-height: 1.5; color: var(--fg-muted); }
+.pc-hint span { display: inline-block; padding: 1px 8px; border-radius: 4px; background: var(--overlay); }
+.pc-msg {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 16px;
+  text-align: center;
+  color: var(--fg-muted);
+  font-size: 13.5px;
+  overflow-wrap: anywhere;
+}
+
+/* 重建块：视频一排 4 个，下面并排 3 个点云 */
+.stage.multi { grid-template-columns: minmax(0, 1fr); grid-template-areas: "ctrl" "videos" "pc"; }
+.stage.multi .videos { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.pc-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.pc-cell { margin: 0; display: grid; grid-template-columns: minmax(0, 1fr); gap: 6px; min-width: 0; }
+.pc-cell figcaption { font-size: 13.5px; line-height: 1.45; overflow-wrap: anywhere; }
+.pc-cell figcaption b { font-weight: 650; }
+.pc-cell figcaption span { color: var(--fg-muted); }
+.stage.multi .pc-view { flex: none; min-height: 0; height: 400px; }
+
+@media (max-width: 860px) {
+  .stage, .stage.multi { grid-template-columns: minmax(0, 1fr); grid-template-areas: "videos" "ctrl" "pc"; }
+  .stage.multi .videos { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .pc-grid { grid-template-columns: minmax(0, 1fr); }
+  .pc-view, .stage.multi .pc-view { flex: none; min-height: 0; height: 360px; }
+}
+@media (max-width: 480px) {
+  .intro h1 { font-size: 22px; }
+  .block h2 { font-size: 18px; }
+  .videos { gap: 8px; }
+  .controls { gap: 8px; padding: 8px; }
+  .counter { min-width: 6.2em; }
+}
+@media (max-width: 340px) {
+  .videos { grid-template-columns: minmax(0, 1fr); }
+}
+</style>
+
+<div class="wrap">
+  <div class="intro">
+    <h1>RGB-D 第 1200 次更新可视化</h1>
+    <p>64 窗口训练（阶段 1，只训练 DiT 里深度这一路）最后一个检查点的结果，在 2 个训练窗口上，一共四块。前两块是生成：只给第 1 帧，DiT 生成后面的 RGB 和深度。后两块是重建：给完整视频，DiT 生成每一帧的深度，和真值、VGGT-Ω 放在一起看；每个重建块下面并排放了三个点云：我们的、真值的、VGGT-Ω 的。</p>
+    <p><b>点云是谁的结果。</b>标“我们”的点云，深度都是 DiT 生成的，是我们的预测。相机不是 DiT 输出的：它来自 A4 解码器（之前训练好、这一阶段没有动）读 RGB 得到的位姿。生成块没有用任何真值；重建块里，我们的和 VGGT-Ω 的点云各乘了一个整体系数对齐到真值的尺度，只为了能并排比较。</p>
+    <p><b>注意。</b>这两个窗口都是训练时见过的视频，在 8 个评估窗口里解码效果排第 1 和第 3，不代表效果差的窗口，也不说明在没见过的视频上的效果。</p>
+    <p class="howto">用法：每块的播放键和帧滑块同时控制视频和点云。在点云上拖动是旋转，滚轮是缩放，右键拖动或按住 Shift 拖动是平移；触屏上单指旋转，双指缩放。重建块的三个点云视角联动，拖动任意一个，另外两个跟着动；它们默认显示全部 22 帧，选“累积到当前帧”再播放，可以看点云逐帧累积。</p>
+    <nav class="jump" id="jump" aria-label="本页各块" hidden></nav>
+  </div>
+  <main id="blocks"></main>
+  <noscript><p class="notice">这个页面需要开启 JavaScript 才能显示视频和点云。</p></noscript>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="data/gen_amusement.js"></script>
+<script src="data/gen_seasons.js"></script>
+<script src="data/rec_amusement.js"></script>
+<script src="data/rec_seasons.js"></script>
+<script>
+(function () {
+  'use strict';
+
+  var ORDER = ['gen_amusement', 'gen_seasons', 'rec_amusement', 'rec_seasons'];
+  var DATA_DIR = 'data/';
+  var VIZ = window.VIZ || {};
+  var THREE = window.THREE;
+  var blocksEl = document.getElementById('blocks');
+  var jumpEl = document.getElementById('jump');
+  var sections = [];
+  var reduceMotion = !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+  var coarsePointer = !!(window.matchMedia && window.matchMedia('(pointer: coarse)').matches);
+
+  function el(tag, cls, text) {
+    var e = document.createElement(tag);
+    if (cls) e.className = cls;
+    if (text !== undefined && text !== null) e.textContent = String(text);
+    return e;
+  }
+
+  function cssVar(name, fallback) {
+    var v = '';
+    try { v = getComputedStyle(document.documentElement).getPropertyValue(name); } catch (err) { v = ''; }
+    v = (v || '').trim();
+    return v || fallback;
+  }
+
+  function clamp(x, lo, hi) { return x < lo ? lo : (x > hi ? hi : x); }
+
+  /* ---------- 点云数据解码 ---------- */
+
+  function b64ToBytes(b64) {
+    var bin = atob(b64);
+    var len = bin.length;
+    var out = new Uint8Array(len);
+    for (var i = 0; i < len; i++) out[i] = bin.charCodeAt(i);
+    return out;
+  }
+
+  // int16 小端 xyz（frames*n 个点，按帧排列），后面接 uint8 rgb。
+  // 位置 = center + int16 / 32767 * half；世界坐标是第 0 帧的 OpenCV 相机系，显示为 (x, -y, -z)。
+  function decodeCloud(pc, frames) {
+    var n = pc.n | 0;
+    if (!(n > 0)) throw new Error('每帧点数 pc.n 不是正数。');
+    var total = frames * n;
+    var bytes;
+    try { bytes = b64ToBytes(pc.b64); } catch (err) { throw new Error('点云的 base64 数据无法解码。'); }
+    if (bytes.length < total * 9) {
+      throw new Error('点云数据长度不够：按 frames × n 需要 ' + (total * 9) + ' 字节，实际 ' + bytes.length + ' 字节。');
+    }
+    var dv = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+    var pos = new Float32Array(total * 3);
+    var cx = +pc.center[0], cy = +pc.center[1], cz = +pc.center[2];
+    var s = +pc.half / 32767;
+    for (var i = 0, o = 0, j = 0; i < total; i++, o += 6, j += 3) {
+      pos[j] = cx + dv.getInt16(o, true) * s;
+      pos[j + 1] = -(cy + dv.getInt16(o + 2, true) * s);
+      pos[j + 2] = -(cz + dv.getInt16(o + 4, true) * s);
+    }
+    return { n: n, total: total, pos: pos, rgb: bytes.slice(total * 6, total * 9) };
+  }
+
+  /* ---------- 相机视锥：把 4 个角排成一圈，避免画成交叉的对角线 ---------- */
+
+  function ringOrder(f) {
+    var c = f[0], m = [0, 0, 0], i;
+    for (i = 1; i <= 4; i++) { m[0] += f[i][0] / 4; m[1] += f[i][1] / 4; m[2] += f[i][2] / 4; }
+    var ax = [m[0] - c[0], m[1] - c[1], m[2] - c[2]];
+    var al = Math.sqrt(ax[0] * ax[0] + ax[1] * ax[1] + ax[2] * ax[2]);
+    if (!(al > 1e-12)) return [1, 2, 3, 4];
+    ax[0] /= al; ax[1] /= al; ax[2] /= al;
+    var u = [f[1][0] - m[0], f[1][1] - m[1], f[1][2] - m[2]];
+    var v = [ax[1] * u[2] - ax[2] * u[1], ax[2] * u[0] - ax[0] * u[2], ax[0] * u[1] - ax[1] * u[0]];
+    var items = [];
+    for (i = 1; i <= 4; i++) {
+      var d = [f[i][0] - m[0], f[i][1] - m[1], f[i][2] - m[2]];
+      items.push({
+        i: i,
+        a: Math.atan2(d[0] * v[0] + d[1] * v[1] + d[2] * v[2], d[0] * u[0] + d[1] * u[1] + d[2] * u[2])
+      });
+    }
+    items.sort(function (p, q) { return p.a - q.a; });
+    return items.map(function (p) { return p.i; });
+  }
+
+  /* ---------- 滚轮归属：从页面别处开始的滚动经过点云时继续滚动页面，不变成缩放 ---------- */
+
+  var wheelLast = -1e9;
+  var wheelOwner = null;
+  window.addEventListener('wheel', function (e) {
+    var now = (window.performance && performance.now) ? performance.now() : Date.now();
+    if (now - wheelLast > 350) {
+      var t = e.target;
+      wheelOwner = (t && t.closest) ? t.closest('.pc-view') : null;
+    }
+    wheelLast = now;
+  }, { capture: true, passive: true });
+
+  /* ---------- 4D 点云视图 ---------- */
+
+  function createViewer(view, canvas, src, frames) {
+    var pc = src.pc;
+    var cloud = decodeCloud(pc, frames);
+    var n = cloud.n, total = cloud.total;
+    var half = +pc.half > 0 ? +pc.half : 1;
+
+    var cams = src.cams || {};
+    var centres = Array.isArray(cams.centres) ? cams.centres : [];
+    var frusta = Array.isArray(cams.frusta) ? cams.frusta : [];
+    var c0 = centres.length
+      ? new THREE.Vector3(+centres[0][0], -centres[0][1], -centres[0][2])
+      : new THREE.Vector3(0, 0, 0);
+
+    // 第一个相机的朝向和视场角，由第 0 帧的视锥算出，让初始画面和第一帧看到的一致。
+    // 没有视锥时按世界坐标的定义取 +z 方向（three.js 里是 -z）和 50° 视场角。
+    var fwd = new THREE.Vector3(0, 0, -1);
+    var srcTanX = 0.577, srcTanY = 0.433, FOV = 50;
+    (function () {
+      var f = frusta[0];
+      if (!f || f.length < 5) return;
+      var dirs = [], axis = new THREE.Vector3(), i;
+      for (i = 1; i <= 4; i++) {
+        dirs.push(new THREE.Vector3(f[i][0] - f[0][0], -(f[i][1] - f[0][1]), -(f[i][2] - f[0][2])));
+        axis.add(dirs[i - 1]);
+      }
+      if (!(axis.length() > 1e-9)) return;
+      axis.normalize();
+      var right = new THREE.Vector3().crossVectors(axis, new THREE.Vector3(0, 1, 0));
+      if (!(right.length() > 1e-6)) return;
+      right.normalize();
+      var up = new THREE.Vector3().crossVectors(right, axis);
+      var tx = 0, ty = 0;
+      for (i = 0; i < 4; i++) {
+        var z = dirs[i].dot(axis);
+        if (!(z > 1e-9)) return;
+        tx = Math.max(tx, Math.abs(dirs[i].dot(right)) / z);
+        ty = Math.max(ty, Math.abs(dirs[i].dot(up)) / z);
+      }
+      if (!(tx > 0 && ty > 0)) return;
+      fwd.copy(axis);
+      srcTanX = tx;
+      srcTanY = ty;
+      FOV = clamp(2 * Math.atan(ty) * 180 / Math.PI, 35, 80);
+    })();
+    var tanHalf = Math.tan(FOV * Math.PI / 360);
+
+    var renderer;
+    try {
+      renderer = new THREE.WebGLRenderer({ canvas: canvas, antialias: true, alpha: false });
+    } catch (err) {
+      throw new Error('浏览器无法创建 WebGL 画面，请换一个浏览器或开启硬件加速。');
+    }
+
+    var scene = new THREE.Scene();
+    var camera = new THREE.PerspectiveCamera(FOV, 1, half * 0.003, half * 80);
+
+    // 全部 frames*n 个点放在一个 THREE.Points 里，逐帧只改 drawRange。
+    var geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.BufferAttribute(cloud.pos, 3));
+    geo.setAttribute('color', new THREE.BufferAttribute(cloud.rgb, 3, true));
+
+    // 默认点大小：第 0 帧的点到第一个相机的中位距离，乘以相邻像素之间的夹角，就是相邻点的大致间距。
+    var dists = new Float32Array(n);
+    for (var i = 0; i < n; i++) {
+      var ex = cloud.pos[i * 3] - c0.x, ey = cloud.pos[i * 3 + 1] - c0.y, ez = cloud.pos[i * 3 + 2] - c0.z;
+      dists[i] = Math.sqrt(ex * ex + ey * ey + ez * ez);
+    }
+    dists.sort();
+    var medDist = dists[n >> 1] > 0 ? dists[n >> 1] : half;
+    var baseSize = 1.3 * 2 * medDist * Math.sqrt(srcTanX * srcTanY / n) / tanHalf;
+    if (src.overview) baseSize *= 1.5;                  // 从远处看整片点云，点画大一点才连得上
+
+    var mat = new THREE.PointsMaterial({ size: baseSize, vertexColors: true, sizeAttenuation: true });
+    var points = new THREE.Points(geo, mat);
+    points.frustumCulled = false;
+    scene.add(points);
+
+    // 相机轨迹：所有中心连成一条线；所有帧的视锥放在一个 LineSegments 里（每帧 16 个顶点）。
+    var camGroup = new THREE.Group();
+    scene.add(camGroup);
+    var lineMat = new THREE.LineBasicMaterial({ color: 0xff5544, depthTest: false, transparent: true });
+
+    var pathPos = new Float32Array(Math.max(1, centres.length) * 3);
+    centres.forEach(function (c, k) {
+      pathPos[k * 3] = +c[0]; pathPos[k * 3 + 1] = -c[1]; pathPos[k * 3 + 2] = -c[2];
+    });
+    var pathGeo = new THREE.BufferGeometry();
+    pathGeo.setAttribute('position', new THREE.BufferAttribute(pathPos, 3));
+    var pathLine = new THREE.Line(pathGeo, lineMat);
+    pathLine.frustumCulled = false;
+    pathLine.renderOrder = 5;
+    camGroup.add(pathLine);
+    // 每个相机中心再画一个小方点（固定像素大小），和轨迹线共用同一个 drawRange
+    var dotMat = new THREE.PointsMaterial({ color: 0xff5544, size: 4, sizeAttenuation: false, depthTest: false, transparent: true });
+    var pathDots = new THREE.Points(pathGeo, dotMat);
+    pathDots.frustumCulled = false;
+    pathDots.renderOrder = 7;
+    camGroup.add(pathDots);
+
+    var frPos = new Float32Array(Math.max(1, frusta.length) * 16 * 3);
+    frusta.forEach(function (f, k) {
+      if (!f || f.length < 5) return;
+      var r = ringOrder(f);
+      var order = [0, r[0], 0, r[1], 0, r[2], 0, r[3], r[0], r[1], r[1], r[2], r[2], r[3], r[3], r[0]];
+      for (var e = 0; e < 16; e++) {
+        var p = f[order[e]], o = (k * 16 + e) * 3;
+        frPos[o] = +p[0]; frPos[o + 1] = -p[1]; frPos[o + 2] = -p[2];
+      }
+    });
+    var frGeo = new THREE.BufferGeometry();
+    frGeo.setAttribute('position', new THREE.BufferAttribute(frPos, 3));
+    var frLines = new THREE.LineSegments(frGeo, lineMat);
+    frLines.frustumCulled = false;
+    frLines.renderOrder = 6;
+    camGroup.add(frLines);
+
+    /* 视角：绕一个中心点旋转的球坐标。
+       初始位置在第一个相机的后上方，沿它的光轴看向点云中心所在的深度。
+       点云中心在第一个相机正前方时，旋转中心就是点云中心；相机走得远、点云中心偏到一侧时，
+       旋转中心取点云中心在光轴上的投影，这样初始画面仍然和第一帧看到的一致。 */
+    var target = new THREE.Vector3();
+    var radius = 1, theta = 0, phi = Math.PI / 2;
+    var home = (function () {
+      var C = new THREE.Vector3(+pc.center[0], -pc.center[1], -pc.center[2]);
+      var depth = new THREE.Vector3().subVectors(C, c0).dot(fwd);
+      if (!(depth > 0.25 * medDist)) depth = medDist;
+      var T = c0.clone().addScaledVector(fwd, depth);
+      var eye = c0.clone().addScaledVector(fwd, -0.65 * medDist);
+      eye.y += 0.22 * medDist;
+      var off = eye.sub(T);
+      var r = off.length();
+      return {
+        tx: T.x, ty: T.y, tz: T.z, radius: r,
+        theta: Math.atan2(off.x, off.z),
+        phi: clamp(Math.acos(clamp(off.y / r, -1, 1)), 0.02, Math.PI - 0.02)
+      };
+    })();
+    // 并排比较用的初始视角：站在相机这一侧、抬高一点，从远处看到整片点云和整条相机轨迹
+    if (src.overview) home = (function () {
+      var C = new THREE.Vector3(+pc.center[0], -pc.center[1], -pc.center[2]);
+      var d = [], step = Math.max(1, Math.floor(total / 20000));
+      for (var i = 0; i < total; i += step) {
+        var px = cloud.pos[i * 3] - C.x, py = cloud.pos[i * 3 + 1] - C.y, pz = cloud.pos[i * 3 + 2] - C.z;
+        d.push(Math.sqrt(px * px + py * py + pz * pz));
+      }
+      d.sort(function (a, b) { return a - b; });
+      var r90 = d[Math.floor(d.length * 0.9)] || half;
+      var mean = new THREE.Vector3();
+      centres.forEach(function (c) { mean.x += +c[0]; mean.y += -c[1]; mean.z += -c[2]; });
+      if (centres.length) mean.multiplyScalar(1 / centres.length); else mean.copy(c0);
+      var dir = mean.sub(C);
+      if (!(dir.length() > 1e-6)) dir.copy(fwd).multiplyScalar(-1);
+      dir.normalize();
+      var r = 1.15 * r90 / tanHalf;
+      centres.forEach(function (c) {                    // 相机轨迹也要在画面里
+        var q = new THREE.Vector3(+c[0] - C.x, -c[1] - C.y, -c[2] - C.z);
+        r = Math.max(r, 1.25 * q.length());
+      });
+      return {
+        tx: C.x, ty: C.y, tz: C.z, radius: r,
+        theta: Math.atan2(dir.x, dir.z),
+        phi: clamp(Math.acos(clamp(dir.y, -1, 1)) - 0.24, 0.15, Math.PI - 0.15)
+      };
+    })();
+    var minR = Math.min(half * 0.02, home.radius * 0.05);
+    var maxR = Math.max(half * 15, home.radius * 4);
+    camera.far = Math.max(half * 80, maxR * 4);
+
+    var v = { dirty: true };
+    var quiet = false;                                  // 联动：别的视图传来的视角不再往回传
+
+    function updateCamera() {
+      var sp = Math.sin(phi);
+      camera.position.set(
+        target.x + radius * sp * Math.sin(theta),
+        target.y + radius * Math.cos(phi),
+        target.z + radius * sp * Math.cos(theta)
+      );
+      camera.up.set(0, 1, 0);
+      camera.lookAt(target);
+      v.dirty = true;
+      if (v.onView && !quiet) v.onView(v);
+    }
+
+    function reset() {
+      target.set(home.tx, home.ty, home.tz);
+      radius = home.radius; theta = home.theta; phi = home.phi;
+      updateCamera();
+    }
+
+    function rotate(dx, dy) {
+      var h = canvas.clientHeight || 1;
+      theta -= 2 * Math.PI * dx / h;
+      phi = clamp(phi - 2 * Math.PI * dy / h, 0.02, Math.PI - 0.02);
+    }
+
+    function pan(dx, dy) {
+      var h = canvas.clientHeight || 1;
+      var k = 2 * radius * tanHalf / h;
+      camera.updateMatrix();
+      var m = camera.matrix.elements;
+      target.x += (-dx * m[0] + dy * m[4]) * k;
+      target.y += (-dx * m[1] + dy * m[5]) * k;
+      target.z += (-dx * m[2] + dy * m[6]) * k;
+    }
+
+    function zoom(factor) { radius = clamp(radius * factor, minR, maxR); }
+
+    /* 指针：左键拖动旋转；右键、中键或按住 Shift 拖动平移；两指捏合缩放并平移 */
+    var pointers = new Map();
+    var dragPan = false;
+    var pinch = null;
+
+    function measure() {
+      var it = pointers.values();
+      var a = it.next().value, b = it.next().value;
+      var ddx = a.x - b.x, ddy = a.y - b.y;
+      return { dist: Math.sqrt(ddx * ddx + ddy * ddy), cx: (a.x + b.x) / 2, cy: (a.y + b.y) / 2 };
+    }
+
+    canvas.addEventListener('pointerdown', function (e) {
+      if (e.pointerType === 'mouse' && e.button > 2) return;
+      try { canvas.setPointerCapture(e.pointerId); } catch (err) { /* 合成事件没有可捕获的指针 */ }
+      pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      if (pointers.size === 1) dragPan = (e.pointerType === 'mouse' && e.button !== 0) || e.shiftKey;
+      else if (pointers.size === 2) pinch = measure();
+      if (e.button === 1) e.preventDefault();   // 中键：不要触发浏览器的自动滚动
+    });
+
+    canvas.addEventListener('pointermove', function (e) {
+      var p = pointers.get(e.pointerId);
+      if (!p) return;
+      var dx = e.clientX - p.x, dy = e.clientY - p.y;
+      p.x = e.clientX; p.y = e.clientY;
+      if (pointers.size === 1) {
+        if (dragPan || e.shiftKey) pan(dx, dy); else rotate(dx, dy);
+      } else if (pointers.size === 2) {
+        var m = measure();
+        if (pinch && pinch.dist > 0 && m.dist > 0) {
+          zoom(pinch.dist / m.dist);
+          pan(m.cx - pinch.cx, m.cy - pinch.cy);
+        }
+        pinch = m;
+      }
+      updateCamera();
+    });
+
+    function release(e) {
+      pointers.delete(e.pointerId);
+      pinch = null;
+      if (pointers.size < 2) dragPan = false;
+    }
+    canvas.addEventListener('pointerup', release);
+    canvas.addEventListener('pointercancel', release);
+    canvas.addEventListener('lostpointercapture', release);
+    canvas.addEventListener('contextmenu', function (e) { e.preventDefault(); });
+
+    canvas.addEventListener('wheel', function (e) {
+      if (wheelOwner !== view) return;
+      e.preventDefault();
+      var dy = e.deltaY;
+      if (e.deltaMode === 1) dy *= 16; else if (e.deltaMode === 2) dy *= 100;
+      if (e.ctrlKey) dy *= 6;
+      zoom(Math.exp(clamp(dy, -400, 400) * 0.0015));
+      updateCamera();
+    }, { passive: false });
+
+    canvas.addEventListener('keydown', function (e) {
+      var step = 0.08;
+      switch (e.key) {
+        case 'ArrowLeft': theta -= step; break;
+        case 'ArrowRight': theta += step; break;
+        case 'ArrowUp': phi = clamp(phi - step, 0.02, Math.PI - 0.02); break;
+        case 'ArrowDown': phi = clamp(phi + step, 0.02, Math.PI - 0.02); break;
+        case '+': case '=': zoom(0.9); break;
+        case '-': case '_': zoom(1 / 0.9); break;
+        case '0': case 'Home': e.preventDefault(); reset(); return;
+        default: return;
+      }
+      e.preventDefault();
+      updateCamera();
+    });
+
+    canvas.addEventListener('webglcontextlost', function (e) { e.preventDefault(); });
+    canvas.addEventListener('webglcontextrestored', function () { v.dirty = true; });
+
+    /* 显示状态 */
+    var frame = 0, mode = 'acc';
+
+    function applyRange() {
+      var k = clamp(frame, 0, frames - 1);
+      if (mode === 'cur') geo.setDrawRange(k * n, n);
+      else if (mode === 'acc') geo.setDrawRange(0, (k + 1) * n);
+      else geo.setDrawRange(0, total);
+      pathGeo.setDrawRange(0, Math.min(k + 1, centres.length));
+      if (k < frusta.length) frGeo.setDrawRange(k * 16, 16); else frGeo.setDrawRange(0, 0);
+      v.dirty = true;
+    }
+
+    v.setFrame = function (k) { frame = k; applyRange(); };
+    v.setMode = function (m) { mode = m; applyRange(); };
+    v.setCams = function (on) { camGroup.visible = !!on; v.dirty = true; };
+    v.setSize = function (mul) { mat.size = baseSize * mul; v.dirty = true; };
+    v.reset = reset;
+    v.getView = function () { return { tx: target.x, ty: target.y, tz: target.z, radius: radius, theta: theta, phi: phi }; };
+    v.setView = function (st) {
+      target.set(st.tx, st.ty, st.tz);
+      radius = st.radius; theta = st.theta; phi = st.phi;
+      quiet = true;
+      updateCamera();
+      quiet = false;
+    };
+    v.render = function () {
+      v.dirty = false;
+      renderer.render(scene, camera);
+      // WebGL 的线只有 1 个设备像素宽，在高分屏上太细：把轨迹和视锥各偏移 1 个设备像素再画一遍。
+      var extra = Math.round(renderer.getPixelRatio()) - 1;
+      if (extra > 0 && camGroup.visible) {
+        var bw = canvas.width, bh = canvas.height, aspect = camera.aspect;
+        points.visible = false;
+        renderer.autoClear = false;
+        for (var i = 1; i <= extra; i++) {
+          camera.setViewOffset(bw, bh, i, 0, bw, bh);
+          renderer.render(scene, camera);
+          camera.setViewOffset(bw, bh, 0, i, bw, bh);
+          renderer.render(scene, camera);
+        }
+        camera.clearViewOffset();
+        camera.aspect = aspect;
+        camera.updateProjectionMatrix();
+        renderer.autoClear = true;
+        points.visible = true;
+      }
+    };
+    v.applyTheme = function () {
+      var camColour = cssVar('--cam', '#ff5544');
+      renderer.setClearColor(new THREE.Color(cssVar('--pc-bg', '#101216')), 1);
+      lineMat.color.set(camColour);
+      dotMat.color.set(camColour);
+      v.dirty = true;
+    };
+    v.resize = function (renderNow) {
+      var w = view.clientWidth, h = view.clientHeight;
+      if (w < 2 || h < 2) return;
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+      renderer.setSize(w, h, false);
+      camera.aspect = w / h;
+      camera.updateProjectionMatrix();
+      v.dirty = true;
+      if (renderNow) v.render();
+    };
+    // 供调试和检查用：当前绘制范围和视角
+    v.debug = function () {
+      return {
+        n: n, total: total, drawStart: geo.drawRange.start, drawCount: geo.drawRange.count,
+        pathCount: pathGeo.drawRange.count, frustumStart: frGeo.drawRange.start, frustumCount: frGeo.drawRange.count,
+        camsVisible: camGroup.visible, pointSize: mat.size, fov: FOV, radius: radius, theta: theta, phi: phi,
+        target: [target.x, target.y, target.z], eye: camera.position.toArray(),
+        clear: '#' + renderer.getClearColor(new THREE.Color()).getHexString(),
+        bufferSize: [canvas.width, canvas.height]
+      };
+    };
+
+    v.applyTheme();
+    v.resize(false);
+    reset();
+    applyRange();
+    return v;
+  }
+
+  /* ---------- 一个区段 ---------- */
+
+  function buildSection(block, id) {
+    var frames = Math.max(1, block.frames | 0);
+    var fps = +block.fps > 0 ? +block.fps : 8;
+    var sw = (block.sprite && block.sprite.w | 0) || 256;
+    var sh = (block.sprite && block.sprite.h | 0) || 192;
+    var isGen = block.task === 'generation';
+
+    // 一个块可以有几个点云（block.clouds：并排、视角联动），没有的话就是原来的单个点云（block.pc / block.cams）
+    var srcs = (Array.isArray(block.clouds) && block.clouds.length) ? block.clouds : [{ pc: block.pc, cams: block.cams }];
+    var multi = srcs.length > 1;
+    var s = {
+      id: id, frames: frames, fps: fps, frame: 0, playing: false, acc: 0,
+      visible: false, pcVisible: false, viewers: [], viewerTried: false,
+      mode: multi ? 'all' : 'acc', showCams: true, sizeMul: 1      // 并排比较时先看完整的点云
+    };
+
+    var sec = el('section', 'block');
+    sec.id = id;
+    s.el = sec;
+
+    /* 标题区 */
+    var head = el('header', 'block-head');
+    var kicker = el('div', 'kicker');
+    kicker.appendChild(el('span', 'tag ' + (isGen ? 'gen' : 'rec'), isGen ? '生成' : '重建'));
+    if (block.clip) kicker.appendChild(el('span', 'clip', block.clip));
+    head.appendChild(kicker);
+    head.appendChild(el('h2', '', block.title || id));
+    if (Array.isArray(block.notes) && block.notes.length) {
+      var ul = el('ul', 'notes');
+      block.notes.forEach(function (t) { ul.appendChild(el('li', '', t)); });
+      head.appendChild(ul);
+    }
+    if (Array.isArray(block.metrics) && block.metrics.length) {
+      var chips = el('div', 'chips');
+      block.metrics.forEach(function (m) {
+        if (!m) return;
+        var chip = el('span', 'chip');
+        chip.appendChild(el('span', 'chip-l', m.label));
+        chip.appendChild(el('span', 'chip-v', m.value));
+        chips.appendChild(chip);
+      });
+      head.appendChild(chips);
+    }
+    sec.appendChild(head);
+
+    var stage = el('div', multi ? 'stage multi' : 'stage');
+    sec.appendChild(stage);
+
+    /* 播放控制：同时驱动视频和点云 */
+    var controls = el('div', 'controls');
+    controls.setAttribute('role', 'group');
+    controls.setAttribute('aria-label', '播放控制');
+    var playBtn = el('button', 'btn play', '播放');
+    playBtn.type = 'button';
+    playBtn.id = 'play-' + id;
+    var slider = el('input');
+    slider.type = 'range';
+    slider.id = 'frame-' + id;
+    slider.min = '1';
+    slider.max = String(frames);
+    slider.step = '1';
+    slider.value = '1';
+    slider.setAttribute('aria-label', '帧');
+    var counter = el('span', 'counter');
+    counter.id = 'counter-' + id;
+    controls.appendChild(playBtn);
+    controls.appendChild(slider);
+    controls.appendChild(counter);
+    if (frames < 2) { playBtn.disabled = true; slider.disabled = true; }
+    stage.appendChild(controls);
+
+    /* 左：视频。每个视频是一张横向长图，第 k 帧是 x = k*w .. (k+1)*w */
+    var videosEl = el('div', 'videos');
+    var vids = [];
+    (Array.isArray(block.videos) ? block.videos : []).forEach(function (vd, i) {
+      if (!vd || typeof vd.src !== 'string') return;
+      var fig = el('figure', 'vid');
+      var cv = el('canvas');
+      cv.width = sw;
+      cv.height = sh;
+      cv.setAttribute('role', 'img');
+      cv.setAttribute('aria-label', vd.label || ('视频 ' + (i + 1)));
+      var cap = el('figcaption', '', vd.label || ('视频 ' + (i + 1)));
+      fig.appendChild(cv);
+      fig.appendChild(cap);
+      videosEl.appendChild(fig);
+      var item = { ctx: cv.getContext('2d'), img: new Image(), ready: false };
+      item.img.onload = function () { item.ready = true; drawOne(item); };
+      item.img.onerror = function () { cap.textContent = (vd.label || '视频') + '（图片无法解码）'; };
+      item.img.src = vd.src;
+      vids.push(item);
+    });
+    stage.appendChild(videosEl);
+
+    function drawOne(item) {
+      if (!item.ready || !item.ctx) return;
+      item.ctx.clearRect(0, 0, sw, sh);
+      item.ctx.drawImage(item.img, s.frame * sw, 0, sw, sh, 0, 0, sw, sh);
+    }
+
+    /* 右：4D 点云 */
+    var pcEl = el('div', 'pc');
+    var bar = el('div', 'pc-bar');
+    bar.appendChild(el('h3', 'pc-title', multi ? '4D 点云（' + srcs.length + ' 个视角联动）' : '4D 点云'));
+
+    var seg = el('div', 'seg');
+    seg.setAttribute('role', 'radiogroup');
+    seg.setAttribute('aria-label', '显示哪些帧的点');
+    [['cur', '当前帧'], ['acc', '累积到当前帧'], ['all', '全部帧']].forEach(function (m) {
+      var lab = el('label');
+      var inp = el('input');
+      inp.type = 'radio';
+      inp.name = 'mode-' + id;
+      inp.id = 'mode-' + id + '-' + m[0];
+      inp.value = m[0];
+      inp.checked = m[0] === s.mode;
+      inp.addEventListener('change', function () {
+        if (!inp.checked) return;
+        s.mode = m[0];
+        s.viewers.forEach(function (v) { v.setMode(s.mode); });
+      });
+      lab.appendChild(inp);
+      lab.appendChild(el('span', '', m[1]));
+      seg.appendChild(lab);
+    });
+    bar.appendChild(seg);
+
+    var camLab = el('label', 'opt');
+    var camBox = el('input');
+    camBox.type = 'checkbox';
+    camBox.id = 'cam-' + id;
+    camBox.checked = true;
+    camBox.addEventListener('change', function () {
+      s.showCams = camBox.checked;
+      s.viewers.forEach(function (v) { v.setCams(s.showCams); });
+    });
+    camLab.appendChild(camBox);
+    camLab.appendChild(document.createTextNode('相机轨迹'));
+    bar.appendChild(camLab);
+
+    var sizeLab = el('label', 'opt');
+    sizeLab.appendChild(document.createTextNode('点大小'));
+    var sizeIn = el('input');
+    sizeIn.type = 'range';
+    sizeIn.id = 'size-' + id;
+    sizeIn.min = '0.2';
+    sizeIn.max = '3';
+    sizeIn.step = '0.05';
+    sizeIn.value = '1';
+    sizeIn.addEventListener('input', function () {
+      s.sizeMul = +sizeIn.value || 1;
+      s.viewers.forEach(function (v) { v.setSize(s.sizeMul); });
+    });
+    sizeLab.appendChild(sizeIn);
+    bar.appendChild(sizeLab);
+
+    var resetBtn = el('button', 'btn', '复位视角');
+    resetBtn.type = 'button';
+    resetBtn.id = 'reset-' + id;
+    resetBtn.addEventListener('click', function () { if (s.viewers.length) s.viewers[0].reset(); });   // 联动时会传给其它视图
+    bar.appendChild(resetBtn);
+    pcEl.appendChild(bar);
+
+    var hintText = coarsePointer ? '单指旋转 · 双指缩放和平移' : '拖动旋转 · 滚轮缩放 · 右键或 Shift 拖动平移';
+    var holder = multi ? el('div', 'pc-grid') : pcEl;
+    var cells = srcs.map(function (src, i) {
+      var c = { src: src, viewer: null };
+      c.view = el('div', 'pc-view');
+      c.canvas = el('canvas');
+      c.canvas.id = 'pc-' + id + (multi ? '-' + (src.key || i) : '');
+      c.canvas.tabIndex = 0;
+      c.canvas.setAttribute('role', 'img');
+      c.canvas.setAttribute('aria-label', (src.label ? src.label + '的' : '') + '4D 点云视图：拖动旋转，滚轮缩放，方向键也可以旋转');
+      c.view.appendChild(c.canvas);
+      c.hint = el('div', 'pc-hint');
+      c.hint.appendChild(el('span', '', hintText));
+      c.view.appendChild(c.hint);
+      if (multi) {
+        var fig = el('figure', 'pc-cell');
+        var cap = el('figcaption');
+        cap.appendChild(el('b', '', src.label || ('点云 ' + (i + 1))));
+        if (src.detail) cap.appendChild(el('span', '', '　' + src.detail));
+        fig.appendChild(cap);
+        fig.appendChild(c.view);
+        holder.appendChild(fig);
+      } else {
+        holder.appendChild(c.view);
+      }
+      return c;
+    });
+    if (multi) pcEl.appendChild(holder);
+    stage.appendChild(pcEl);
+    s.view = multi ? holder : cells[0].view;
+
+    function cellMessage(c, text) {
+      c.canvas.hidden = true;
+      c.hint.hidden = true;
+      c.view.appendChild(el('div', 'pc-msg', text));
+    }
+    function disableBar() {
+      seg.querySelectorAll('input').forEach(function (i) { i.disabled = true; });
+      camBox.disabled = true;
+      sizeIn.disabled = true;
+      resetBtn.disabled = true;
+    }
+
+    s.ensureViewer = function () {
+      if (s.viewers.length || s.viewerTried) return;
+      s.viewerTried = true;
+      cells.forEach(function (c) {
+        if (!THREE) { cellMessage(c, 'three.js 没有加载成功，点云无法显示；视频不受影响。'); return; }
+        if (!c.src.pc || typeof c.src.pc.b64 !== 'string' || !Array.isArray(c.src.pc.center)) {
+          cellMessage(c, '这里没有点云数据。');
+          return;
+        }
+        try {
+          c.viewer = createViewer(c.view, c.canvas, c.src, frames);
+        } catch (err) {
+          if (window.console && console.error) console.error(err);
+          cellMessage(c, '点云无法显示：' + (err && err.message ? err.message : '未知错误'));
+          return;
+        }
+        c.viewer.setMode(s.mode);
+        c.viewer.setCams(s.showCams);
+        c.viewer.setSize(s.sizeMul);
+        c.viewer.setFrame(s.frame);
+        s.viewers.push(c.viewer);
+        if (window.ResizeObserver) {
+          new ResizeObserver(function () { c.viewer.resize(s.pcVisible); }).observe(c.view);
+        }
+      });
+      if (!s.viewers.length) { disableBar(); return; }
+      if (s.viewers.length > 1) {                       // 视角联动：谁动了，就把视角传给其它几个
+        s.viewers.forEach(function (v) {
+          v.onView = function (from) {
+            var st = from.getView();
+            s.viewers.forEach(function (o) { if (o !== from) o.setView(st); });
+          };
+        });
+        s.viewers[0].reset();
+      }
+    };
+
+    /* 帧与播放 */
+    s.setFrame = function (k) {
+      k = ((Math.round(k) % frames) + frames) % frames;
+      s.frame = k;
+      if (slider.value !== String(k + 1)) slider.value = String(k + 1);
+      var text = '第 ' + (k + 1) + ' / ' + frames + ' 帧';
+      counter.textContent = text;
+      slider.setAttribute('aria-valuetext', text);
+      for (var i = 0; i < vids.length; i++) drawOne(vids[i]);
+      s.viewers.forEach(function (v) { v.setFrame(k); });
+    };
+
+    s.setPlaying = function (on) {
+      s.playing = !!on && frames > 1;
+      s.acc = 0;
+      playBtn.textContent = s.playing ? '暂停' : '播放';
+    };
+
+    playBtn.addEventListener('click', function () { s.setPlaying(!s.playing); });
+    slider.addEventListener('input', function () {
+      if (s.playing) s.setPlaying(false);
+      s.setFrame((+slider.value || 1) - 1);
+    });
+
+    s.setFrame(0);
+    return s;
+  }
+
+  /* ---------- 组装页面 ---------- */
+
+  ORDER.forEach(function (id) {
+    var block = VIZ[id];
+    if (!block || typeof block !== 'object') {
+      blocksEl.appendChild(el('p', 'notice', '没有加载到 ' + DATA_DIR + id + '.js（文件缺失或内容有误），这一块先跳过。'));
+      return;
+    }
+    try {
+      var s = buildSection(block, id);
+      blocksEl.appendChild(s.el);
+      sections.push(s);
+      var a = el('a', '', block.title || id);
+      a.href = '#' + id;
+      a.addEventListener('click', function (e) {
+        e.preventDefault();
+        s.el.scrollIntoView({ behavior: reduceMotion ? 'auto' : 'smooth', block: 'start' });
+      });
+      jumpEl.appendChild(a);
+    } catch (err) {
+      if (window.console && console.error) console.error(err);
+      blocksEl.appendChild(el('p', 'notice', DATA_DIR + id + '.js 的内容无法显示：' + (err && err.message ? err.message : '格式不对')));
+    }
+  });
+  if (sections.length > 1) jumpEl.hidden = false;
+
+  // 第一块自动播放（系统要求减少动画时不自动播放），其余停在第 1 帧。
+  if (sections.length && !reduceMotion) sections[0].setPlaying(true);
+
+  /* 可见性：区段滚出视野就暂停；点云画布不在视野内就不渲染；快滚到时才创建 WebGL */
+  if ('IntersectionObserver' in window) {
+    var owners = new Map();
+    var seen = new IntersectionObserver(function (entries) {
+      entries.forEach(function (en) {
+        var o = owners.get(en.target);
+        if (!o) return;
+        if (o.kind === 'section') {
+          o.s.visible = en.isIntersecting;
+          if (!en.isIntersecting && o.s.playing) o.s.setPlaying(false);
+        } else {
+          o.s.pcVisible = en.isIntersecting;
+          if (en.isIntersecting) {
+            o.s.ensureViewer();
+            o.s.viewers.forEach(function (v) { v.resize(false); });
+          }
+        }
+      });
+    }, { threshold: 0 });
+    var near = new IntersectionObserver(function (entries) {
+      entries.forEach(function (en) {
+        var o = owners.get(en.target);
+        if (!o || !en.isIntersecting) return;
+        o.s.ensureViewer();
+        near.unobserve(en.target);
+      });
+    }, { rootMargin: '600px 0px', threshold: 0 });
+    sections.forEach(function (s) {
+      owners.set(s.el, { s: s, kind: 'section' });
+      owners.set(s.view, { s: s, kind: 'pc' });
+      seen.observe(s.el);
+      seen.observe(s.view);
+      near.observe(s.view);
+    });
+  } else {
+    sections.forEach(function (s) {
+      s.visible = true;
+      s.pcVisible = true;
+      s.ensureViewer();
+    });
+  }
+
+  /* 主题变化时更新 WebGL 的底色和轨迹颜色 */
+  function onTheme() {
+    sections.forEach(function (s) { s.viewers.forEach(function (v) { v.applyTheme(); }); });
+  }
+  if (window.matchMedia) {
+    var mq = window.matchMedia('(prefers-color-scheme: dark)');
+    if (mq.addEventListener) mq.addEventListener('change', onTheme);
+    else if (mq.addListener) mq.addListener(onTheme);
+  }
+  if (window.MutationObserver) {
+    new MutationObserver(onTheme).observe(document.documentElement, {
+      attributes: true, attributeFilter: ['data-theme', 'class', 'style']
+    });
+  }
+
+  /* 一个 rAF 循环：按各自的 fps 推进正在播放的区段；只在需要时重画可见的点云 */
+  var lastTime = 0;
+  function tick(now) {
+    requestAnimationFrame(tick);
+    var dt = lastTime ? Math.min(0.25, (now - lastTime) / 1000) : 0;
+    lastTime = now;
+    for (var i = 0; i < sections.length; i++) {
+      var s = sections[i];
+      if (s.playing && s.visible) {
+        s.acc += dt;
+        var step = 1 / s.fps;
+        if (s.acc >= step) {
+          var adv = Math.floor(s.acc / step);
+          s.acc -= adv * step;
+          s.setFrame(s.frame + adv);
+        }
+      }
+      if (s.pcVisible) for (var j = 0; j < s.viewers.length; j++) if (s.viewers[j].dirty) s.viewers[j].render();
+    }
+  }
+  requestAnimationFrame(tick);
+
+  // 供检查用
+  window.__viz = { sections: sections };
+})();
+</script>
