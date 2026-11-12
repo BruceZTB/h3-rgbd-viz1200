@@ -269,18 +269,21 @@ body {
   .controls { gap: 8px; padding: 8px; }
   .counter { min-width: 6.2em; }
 }
+@media (max-width: 860px) and (pointer: coarse) {
+  .pc-grid { padding-right: 36px; }   /* 触屏：点云叠放时右边留一条可以滑动页面的空白 */
+}
 @media (max-width: 340px) {
-  .videos { grid-template-columns: minmax(0, 1fr); }
+  .videos, .stage.multi .videos { grid-template-columns: minmax(0, 1fr); }
 }
 </style>
 
 <div class="wrap">
   <div class="intro">
     <h1>RGB-D 第 1200 次更新可视化</h1>
-    <p>64 窗口训练（阶段 1，只训练 DiT 里深度这一路）最后一个检查点的结果，在 2 个训练窗口上，一共四块。前两块是生成：只给第 1 帧，DiT 生成后面的 RGB 和深度。后两块是重建：给完整视频，DiT 生成每一帧的深度，和真值、VGGT-Ω 放在一起看；每个重建块下面并排放了三个点云：我们的、真值的、VGGT-Ω 的。</p>
-    <p><b>点云是谁的结果。</b>标“我们”的点云，深度都是 DiT 生成的，是我们的预测。相机不是 DiT 输出的：它来自 A4 解码器（之前训练好、这一阶段没有动）读 RGB 得到的位姿。生成块没有用任何真值；重建块里，我们的和 VGGT-Ω 的点云各乘了一个整体系数对齐到真值的尺度，只为了能并排比较。</p>
-    <p><b>注意。</b>这两个窗口都是训练时见过的视频，在 8 个评估窗口里解码效果排第 1 和第 3，不代表效果差的窗口，也不说明在没见过的视频上的效果。</p>
-    <p class="howto">用法：每块的播放键和帧滑块同时控制视频和点云。在点云上拖动是旋转，滚轮是缩放，右键拖动或按住 Shift 拖动是平移；触屏上单指旋转，双指缩放。重建块的三个点云视角联动，拖动任意一个，另外两个跟着动；它们默认显示全部 22 帧，选“累积到当前帧”再播放，可以看点云逐帧累积。</p>
+    <p>64 窗口训练（阶段 1，只训练 DiT 里深度这一路）最后一个检查点的结果，在 2 个训练窗口上，一共四块。前两块是生成：只给第 1 帧 RGB，DiT 生成整段 22 帧的 RGB 和每一帧的深度（RGB 这一路是原始 H3，没有训练）。后两块是重建：给完整视频，DiT 生成每一帧的深度，和真值、VGGT-Ω 放在一起看；每个重建块下面并排放了三个点云：我们的、真值的、VGGT-Ω 的。</p>
+    <p><b>点云是谁的结果。</b>生成块的点云和重建块里标“我们”的点云，都是我们模型的预测：深度是 DiT 生成的。相机（位姿和焦距）不是 DiT 输出的，来自 A4 解码器读 RGB latent 的结果；A4 是之前训练好的几何解码器，这一阶段没有动。DiT 的深度没有绝对尺度：生成块里按 A4 的深度乘了一个整体系数，没有用任何真值；重建块里，我们的和 VGGT-Ω 的点云各乘了一个整体系数对齐到真值的尺度，只为了能并排比较。</p>
+    <p><b>注意。</b>这两个窗口都是训练时见过的视频。训练时在 8 个训练窗口上做了评估，按重建深度的误差（AbsRel，越低越好）排，这两个窗口是第 1 和第 3 好的；8 个窗口里 AbsRel 低于 0.1 的只有 3 个，另有 3 个在 0.19–0.23，2 个不可用（4.20 和 10.87）。所以本页不代表效果差的窗口，也不说明在没见过的视频上的效果。生成块里的 RGB 视频相机几乎不动（按 A4 估计的轨迹，长度只有真实视频的 7%–8%），所以生成块的点云接近单视角。</p>
+    <p class="howto">用法：每块的播放键和帧滑块同时控制视频和点云。点云里红色线框是当前帧的相机，红线是相机轨迹。在点云上拖动是旋转，滚轮是缩放，右键拖动或按住 Shift 拖动是平移；触屏上单指旋转，双指缩放。重建块的三个点云视角联动，拖动任意一个，另外两个跟着动；它们默认显示全部 22 帧的点和整条相机轨迹，选“累积到当前帧”再播放，可以看点云逐帧累积。</p>
     <nav class="jump" id="jump" aria-label="本页各块" hidden></nav>
   </div>
   <main id="blocks"></main>
@@ -393,7 +396,7 @@ body {
 
   /* ---------- 4D 点云视图 ---------- */
 
-  function createViewer(view, canvas, src, frames) {
+  function createViewer(view, canvas, src, frames, shared) {
     var pc = src.pc;
     var cloud = decodeCloud(pc, frames);
     var n = cloud.n, total = cloud.total;
@@ -437,6 +440,8 @@ body {
       srcTanY = ty;
       FOV = clamp(2 * Math.atan(ty) * 180 / Math.PI, 35, 80);
     })();
+    // 并排联动的几个视图必须用同一个视场角：各用各的相机焦距的话，焦距估得大的那个点云会被放大
+    if (shared && shared.fov > 0) FOV = shared.fov;
     var tanHalf = Math.tan(FOV * Math.PI / 360);
 
     var renderer;
@@ -546,7 +551,9 @@ body {
       var dir = mean.sub(C);
       if (!(dir.length() > 1e-6)) dir.copy(fwd).multiplyScalar(-1);
       dir.normalize();
-      var r = 1.15 * r90 / tanHalf;
+      // 竖着的窄画面（三列并排时）横向视场角更小，按窄的那个方向算距离
+      var asp = (view.clientWidth > 1 && view.clientHeight > 1) ? view.clientWidth / view.clientHeight : 1;
+      var r = 1.15 * r90 / (tanHalf * Math.min(1, asp));
       centres.forEach(function (c) {                    // 相机轨迹也要在画面里
         var q = new THREE.Vector3(+c[0] - C.x, -c[1] - C.y, -c[2] - C.z);
         r = Math.max(r, 1.25 * q.length());
@@ -557,6 +564,10 @@ body {
         phi: clamp(Math.acos(clamp(dir.y, -1, 1)) - 0.24, 0.15, Math.PI - 0.15)
       };
     })();
+    if (shared) {                                       // 并排联动的视图共用第一个视图的视场角和初始视角
+      if (shared.home) home = shared.home;
+      else { shared.home = home; shared.fov = FOV; }
+    }
     var minR = Math.min(half * 0.02, home.radius * 0.05);
     var maxR = Math.max(half * 15, home.radius * 4);
     camera.far = Math.max(half * 80, maxR * 4);
@@ -687,7 +698,8 @@ body {
       if (mode === 'cur') geo.setDrawRange(k * n, n);
       else if (mode === 'acc') geo.setDrawRange(0, (k + 1) * n);
       else geo.setDrawRange(0, total);
-      pathGeo.setDrawRange(0, Math.min(k + 1, centres.length));
+      // 显示全部帧的点时也画出整条相机轨迹；其它两种方式只画到当前帧
+      pathGeo.setDrawRange(0, mode === 'all' ? centres.length : Math.min(k + 1, centres.length));
       if (k < frusta.length) frGeo.setDrawRange(k * 16, 16); else frGeo.setDrawRange(0, 0);
       v.dirty = true;
     }
@@ -868,7 +880,7 @@ body {
     /* 右：4D 点云 */
     var pcEl = el('div', 'pc');
     var bar = el('div', 'pc-bar');
-    bar.appendChild(el('h3', 'pc-title', multi ? '4D 点云（' + srcs.length + ' 个视角联动）' : '4D 点云'));
+    bar.appendChild(el('h3', 'pc-title', multi ? '4D 点云（' + srcs.length + ' 个并排，视角联动）' : '4D 点云'));
 
     var seg = el('div', 'seg');
     seg.setAttribute('role', 'radiogroup');
@@ -974,6 +986,7 @@ body {
     s.ensureViewer = function () {
       if (s.viewers.length || s.viewerTried) return;
       s.viewerTried = true;
+      var shared = multi ? {} : null;
       cells.forEach(function (c) {
         if (!THREE) { cellMessage(c, 'three.js 没有加载成功，点云无法显示；视频不受影响。'); return; }
         if (!c.src.pc || typeof c.src.pc.b64 !== 'string' || !Array.isArray(c.src.pc.center)) {
@@ -981,7 +994,7 @@ body {
           return;
         }
         try {
-          c.viewer = createViewer(c.view, c.canvas, c.src, frames);
+          c.viewer = createViewer(c.view, c.canvas, c.src, frames, shared);
         } catch (err) {
           if (window.console && console.error) console.error(err);
           cellMessage(c, '点云无法显示：' + (err && err.message ? err.message : '未知错误'));
